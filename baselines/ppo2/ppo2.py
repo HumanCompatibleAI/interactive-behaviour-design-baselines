@@ -15,6 +15,8 @@ from baselines.common.mpi_adam_optimizer import MpiAdamOptimizer
 from mpi4py import MPI
 from baselines.common.tf_util import initialize
 from baselines.common.mpi_util import sync_from_root
+from policies.base_policy import PolicyTrainMode
+
 
 class Model(object):
     """
@@ -41,6 +43,8 @@ class Model(object):
             # Train model for training
             train_model = policy(nbatch_train, nsteps, sess)
 
+            bc_model = policy(nbatch=None, nsteps=1, sess=sess)
+
         # CREATE THE PLACEHOLDERS
         A = train_model.pdtype.sample_placeholder([None])
         ADV = tf.placeholder(tf.float32, [None])
@@ -52,6 +56,7 @@ class Model(object):
         LR = tf.placeholder(tf.float32, [])
         # Cliprange
         CLIPRANGE = tf.placeholder(tf.float32, [])
+        BC_ACT = tf.placeholder(bc_model.action.dtype, [None])
 
         neglogpac = train_model.pd.neglogp(A)
 
@@ -89,23 +94,39 @@ class Model(object):
         # Total loss
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
 
+        bc_neglogp = bc_model.pd.neglogp(BC_ACT)
+        assert bc_neglogp.shape.as_list() == [None]
+        bc_entropy = bc_model.pd.entropy()
+        assert bc_entropy.shape.as_list() == [None]
+        bc_ent_coef = 0.1
+        bc_coef = 10
+        bc_loss = tf.reduce_mean(bc_neglogp) - tf.reduce_mean(bc_entropy) * bc_ent_coef
+
+        losses = {
+            PolicyTrainMode.R_ONLY: loss,
+            PolicyTrainMode.BC_ONLY: bc_loss,
+            PolicyTrainMode.R_PLUS_BC: loss + bc_loss * bc_coef
+        }
+
+        train_ops = dict()
         # UPDATE THE PARAMETERS USING LOSS
         # 1. Get the model parameters
         params = tf.trainable_variables('ppo2_model')
-        # 2. Build our trainer
-        trainer = MpiAdamOptimizer(MPI.COMM_WORLD, learning_rate=LR, epsilon=1e-5)
-        # 3. Calculate the gradients
-        grads_and_var = trainer.compute_gradients(loss, params)
-        grads, var = zip(*grads_and_var)
+        for loss in [PolicyTrainMode.R_ONLY, PolicyTrainMode.R_PLUS_BC, PolicyTrainMode.BC_ONLY]:
+            # 2. Build our trainer
+            trainer = MpiAdamOptimizer(MPI.COMM_WORLD, learning_rate=LR, epsilon=1e-5)
+            # 3. Calculate the gradients
+            grads_and_var = trainer.compute_gradients(losses[loss], params)
+            grads, var = zip(*grads_and_var)
 
-        if max_grad_norm is not None:
-            # Clip the gradients (normalize)
-            grads, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
-        grads_and_var = list(zip(grads, var))
-        # zip aggregate each gradient with parameters associated
-        # For instance zip(ABCD, xyza) => Ax, By, Cz, Da
+            if max_grad_norm is not None:
+                # Clip the gradients (normalize)
+                grads, _grad_norm = tf.clip_by_global_norm(grads, max_grad_norm)
+            grads_and_var = list(zip(grads, var))
+            # zip aggregate each gradient with parameters associated
+            # For instance zip(ABCD, xyza) => Ax, By, Cz, Da
 
-        _train = trainer.apply_gradients(grads_and_var)
+            train_ops[loss] = trainer.apply_gradients(grads_and_var)
 
         def train(lr, cliprange, obs, returns, masks, actions, values, neglogpacs, states=None):
             # Here we calculate advantage A(s,a) = R + yV(s') - V(s)
@@ -119,14 +140,20 @@ class Model(object):
             if states is not None:
                 td_map[train_model.S] = states
                 td_map[train_model.M] = masks
+
             return sess.run(
-                [pg_loss, vf_loss, entropy, approxkl, clipfrac, _train],
+                [pg_loss, vf_loss, entropy, approxkl, clipfrac, train_ops[PolicyTrainMode.R_ONLY]],
                 td_map
             )[:-1]
         self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
 
+        def train_bc(obs, actions, lr):
+            feed_dict = {bc_model.X: obs, BC_ACT: actions, LR: lr}
+            l, _ = sess.run([bc_loss, train_ops[PolicyTrainMode.BC_ONLY]], feed_dict)
+            return l
 
         self.train = train
+        self.train_bc = train_bc
         self.train_model = train_model
         self.act_model = act_model
         self.step = act_model.step
