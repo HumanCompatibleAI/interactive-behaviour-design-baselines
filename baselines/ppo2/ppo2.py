@@ -56,7 +56,8 @@ class Model(object):
         LR = tf.placeholder(tf.float32, [])
         # Cliprange
         CLIPRANGE = tf.placeholder(tf.float32, [])
-        BC_ACT = tf.placeholder(bc_model.action.dtype, [None])
+
+        BC_ACT = tf.placeholder(bc_model.action.dtype, bc_model.action.shape)
 
         neglogpac = train_model.pd.neglogp(A)
 
@@ -94,18 +95,28 @@ class Model(object):
         # Total loss
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
 
-        bc_neglogp = bc_model.pd.neglogp(BC_ACT)
-        assert bc_neglogp.shape.as_list() == [None]
+        if bc_model.action.dtype == tf.float32:
+            bc_loss = tf.nn.l2_loss(bc_model.action - BC_ACT)
+            assert bc_loss.shape.as_list() == []
+        elif bc_model.action.dtype == tf.int64:
+            bc_loss = bc_model.pd.neglogp(BC_ACT)
+            assert bc_loss.shape.as_list() == [None]
+            bc_loss = tf.reduce_mean(bc_loss)
+        else:
+            raise Exception(f"Unknown action dtype '{bc_model.action.dtype}'")
+
         bc_entropy = bc_model.pd.entropy()
         assert bc_entropy.shape.as_list() == [None]
+        bc_entropy = tf.reduce_mean(bc_entropy)
+
         bc_ent_coef = 0.1
         bc_coef = 10
-        bc_loss = tf.reduce_mean(bc_neglogp) - tf.reduce_mean(bc_entropy) * bc_ent_coef
+        bc_loss_full = bc_loss - bc_entropy * bc_ent_coef
 
         losses = {
             PolicyTrainMode.R_ONLY: loss,
-            PolicyTrainMode.BC_ONLY: bc_loss,
-            PolicyTrainMode.R_PLUS_BC: loss + bc_loss * bc_coef
+            PolicyTrainMode.BC_ONLY: bc_loss_full,
+            PolicyTrainMode.R_PLUS_BC: loss + bc_loss_full * bc_coef
         }
 
         train_ops = dict()
@@ -149,13 +160,14 @@ class Model(object):
 
         def train_bc(obs, actions, lr):
             feed_dict = {bc_model.X: obs, BC_ACT: actions, LR: lr}
-            l, _ = sess.run([bc_loss, train_ops[PolicyTrainMode.BC_ONLY]], feed_dict)
+            l, _ = sess.run([bc_loss_full, train_ops[PolicyTrainMode.BC_ONLY]], feed_dict)
             return l
 
         self.train = train
         self.train_bc = train_bc
         self.train_model = train_model
         self.act_model = act_model
+        self.bc_model = bc_model
         self.step = act_model.step
         self.value = act_model.value
         self.initial_state = act_model.initial_state
