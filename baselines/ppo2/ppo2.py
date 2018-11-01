@@ -158,13 +158,42 @@ class Model(object):
             )[:-1]
         self.loss_names = ['policy_loss', 'value_loss', 'policy_entropy', 'approxkl', 'clipfrac']
 
-        def train_bc(obs, actions, lr):
+        def train_rl_bc(lr, cliprange=None, obs=None, returns=None, masks=None, actions=None,
+                        values=None, neglogpacs=None, states=None,
+                        train_mode=PolicyTrainMode.R_ONLY, bc_obses=None, bc_actions=None):
+            td_map = {LR: lr}
+            fetches = {}
+            if train_mode in [PolicyTrainMode.R_ONLY, PolicyTrainMode.R_PLUS_BC]:
+                advs = returns - values
+                advs = (advs - advs.mean()) / (advs.std() + 1e-8)
+                td_map.update({train_model.X: obs,
+                               A: actions,
+                               ADV: advs,
+                               R: returns,
+                               CLIPRANGE: cliprange,
+                               OLDNEGLOGPAC: neglogpacs,
+                               OLDVPRED: values})
+                if states is not None:
+                    td_map[train_model.S] = states
+                    td_map[train_model.M] = masks
+                fetches.update({'policy_loss': pg_loss, 'value_loss': vf_loss,
+                                'policy_entropy': entropy, 'approxkl': approxkl,
+                                'clipfrac': clipfrac})
+            if train_mode in [PolicyTrainMode.BC_ONLY, PolicyTrainMode.R_PLUS_BC]:
+                td_map.update({bc_model.X: bc_obses,
+                              BC_ACT: bc_actions})
+                fetches.update({'bc_loss': bc_loss_full})
+            train_op = train_ops[train_mode]
+            vals = sess.run(list(fetches.values()) + [train_op], td_map)[:-1]
+            return {k: v for k, v in zip(fetches.keys(), vals)}
+
+        def train_bc_only(obs, actions, lr):
             feed_dict = {bc_model.X: obs, BC_ACT: actions, LR: lr}
             l, _ = sess.run([bc_loss_full, train_ops[PolicyTrainMode.BC_ONLY]], feed_dict)
             return l
 
         self.train = train
-        self.train_bc = train_bc
+        self.train_bc_only = train_bc_only
         self.train_model = train_model
         self.act_model = act_model
         self.bc_model = bc_model
