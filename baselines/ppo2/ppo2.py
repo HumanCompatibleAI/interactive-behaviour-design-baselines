@@ -193,6 +193,7 @@ class Model(object):
             return l
 
         self.train = train
+        self.train_rl_bc = train_rl_bc
         self.train_bc_only = train_bc_only
         self.train_model = train_model
         self.act_model = act_model
