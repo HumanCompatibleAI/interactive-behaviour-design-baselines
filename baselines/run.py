@@ -219,6 +219,11 @@ def main():
         save_path = osp.expanduser(args.save_path)
         model.save(save_path)
 
+    with tf.variable_scope("ppo2_model/pi", reuse=True):
+        noise = tf.get_variable('logstd')
+    sess = get_session()
+    sess.run(noise.assign(np.zeros(noise.shape)))
+
     if args.play:
         logger.log("Running trained model")
         env = build_env(args)
