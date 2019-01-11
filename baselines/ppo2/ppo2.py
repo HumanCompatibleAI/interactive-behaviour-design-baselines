@@ -105,18 +105,12 @@ class Model(object):
         else:
             raise Exception(f"Unknown action dtype '{bc_model.action.dtype}'")
 
-        bc_entropy = bc_model.pd.entropy()
-        assert bc_entropy.shape.as_list() == [None]
-        bc_entropy = tf.reduce_mean(bc_entropy)
-
-        bc_ent_coef = 0.1
         bc_coef = 10
-        bc_loss_full = bc_loss - bc_entropy * bc_ent_coef
 
         losses = {
             PolicyTrainMode.R_ONLY: loss,
-            PolicyTrainMode.BC_ONLY: bc_loss_full,
-            PolicyTrainMode.R_PLUS_BC: loss + bc_loss_full * bc_coef
+            PolicyTrainMode.BC_ONLY: bc_loss,
+            PolicyTrainMode.R_PLUS_BC: loss + bc_loss * bc_coef
         }
 
         train_ops = dict()
