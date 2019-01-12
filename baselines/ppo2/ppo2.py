@@ -92,8 +92,12 @@ class Model(object):
         approxkl = .5 * tf.reduce_mean(tf.square(neglogpac - OLDNEGLOGPAC))
         clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), CLIPRANGE)))
 
+        weights = [v for v in tf.trainable_variables() if '/w:0' in v.name]
+        print(weights)
+        l2_loss = tf.add_n([tf.nn.l2_loss(w) for w in weights])
+
         # Total loss
-        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
+        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef + 1e-5 * l2_loss
 
         if bc_model.action.dtype == tf.float32:
             bc_loss = tf.nn.l2_loss(bc_model.action - BC_ACT)
