@@ -176,7 +176,7 @@ class Model(object):
             if train_mode in [PolicyTrainMode.BC_ONLY, PolicyTrainMode.R_PLUS_BC]:
                 td_map.update({bc_model.X: bc_obses,
                               BC_ACT: bc_actions})
-                fetches.update({'bc_loss': bc_loss_full})
+                fetches.update({'bc_loss': bc_loss})
             train_op = train_ops[train_mode]
             vals = sess.run(list(fetches.values()) + [train_op], td_map)[:-1]
             return {k: v for k, v in zip(fetches.keys(), vals)}
