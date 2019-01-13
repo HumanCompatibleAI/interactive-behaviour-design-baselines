@@ -100,7 +100,11 @@ class Model(object):
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef #+ 1e-5 * l2_loss
 
         if bc_model.action.dtype == tf.float32:
-            bc_loss = tf.nn.l2_loss(bc_model.action - BC_ACT)
+            squared_differences = (bc_model.pi - BC_ACT) ** 2
+            assert squared_differences.shape.as_list() == [None, ac_space.shape[0]]
+            squared_norms = tf.reduce_sum(squared_differences, axis=1)
+            assert squared_norms.shape.as_list() == [None]
+            bc_loss = tf.reduce_mean(squared_norms, axis=0)
             assert bc_loss.shape.as_list() == []
         elif bc_model.action.dtype == tf.int64:
             bc_loss = bc_model.pd.neglogp(BC_ACT)
@@ -199,6 +203,8 @@ class Model(object):
         self.step = act_model.step
         self.value = act_model.value
         self.initial_state = act_model.initial_state
+        self.losses = losses
+        self.BC_ACT = BC_ACT
 
         self.save = functools.partial(save_variables, sess=sess)
         self.load = functools.partial(load_variables, sess=sess)
