@@ -191,8 +191,8 @@ class Model(object):
 
         def train_bc_only(obs, actions, lr):
             feed_dict = {bc_model.X: obs, BC_ACT: actions, LR: lr}
-            loss, _ = sess.run([bc_loss, train_ops[PolicyTrainMode.BC_ONLY]], feed_dict)
-            return loss
+            loss, l2_loss_v, _ = sess.run([bc_loss, l2_loss, train_ops[PolicyTrainMode.BC_ONLY]], feed_dict)
+            return loss, l2_loss_v
 
         self.train = train
         self.train_rl_bc = train_rl_bc
