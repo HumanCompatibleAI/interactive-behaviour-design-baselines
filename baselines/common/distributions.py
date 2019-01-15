@@ -222,7 +222,7 @@ class DiagGaussianPd(Pd):
         self.flat = flat
         mean, logstd = tf.split(axis=len(flat.shape)-1, num_or_size_splits=2, value=flat)
         self.mean = mean
-        self.logstd = logstd
+        self.logstd = logstd + tf.log(2.0)
         self.std = tf.exp(logstd)
     def flatparam(self):
         return self.flat
