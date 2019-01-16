@@ -106,6 +106,10 @@ class DiagGaussianPdType(PdType):
     def sample_dtype(self):
         return tf.float32
 
+class OUPdType(DiagGaussianPdType):
+    def pdclass(self):
+        return OUPd
+
 class BernoulliPdType(PdType):
     def __init__(self, size):
         self.size = size
@@ -243,6 +247,32 @@ class DiagGaussianPd(Pd):
     def fromflat(cls, flat):
         return cls(flat)
 
+class OUPd(DiagGaussianPd):
+    """
+    Hacked-up Ornstein-Uhlenbeck noise.
+    kl(), entropy() and neglogp() probably don't the mathematically-correct answers, but:
+    - For continuous environments we set ent_coef to 0 so entropy() isn't used
+    - kl() isn't used
+    - neglogp should still propagate reasonable gradients to logstd
+    """
+
+    def __init__(self, flat):
+        DiagGaussianPd.__init__(self, flat)
+        assert len(self.mean.shape.as_list()) == 2
+        if self.mean.shape.as_list()[0] == None:
+            # This is probably the behavioral cloning model,
+            # which is set up for variable-sized batches.
+            # By setting the batch size of the noise to 1,
+            # we'll end up applying the same noise to all actions in the batch.
+            # This seems not ideal, but it should remain unbiased over multiple
+            # batches...?
+            noise_shape = [1, self.mean.shape.as_list()[1]]
+        else:
+            noise_shape = self.mean.shape
+        self.noise = ornstein_uhlenbeck(mu=tf.zeros(noise_shape), sigma=0.2)
+
+    def sample(self):
+        return self.mean + self.std * self.noise
 
 class BernoulliPd(Pd):
     def __init__(self, logits):
@@ -268,11 +298,17 @@ class BernoulliPd(Pd):
     def fromflat(cls, flat):
         return cls(flat)
 
+
 def make_pdtype(ac_space):
     from gym import spaces
-    if isinstance(ac_space, spaces.Box):
+    if isinstance(ac_space, spaces.Box) and ac_space.shape == (4,): # try to fetech Fetch
         assert len(ac_space.shape) == 1
-        return DiagGaussianPdType(ac_space.shape[0])
+        return OUPdType(ac_space.shape[0])
+    elif isinstance(ac_space, spaces.Box):
+        print("Warning: about to instantiate continuous policy without Ornstein-Uhlenbeck noise. Is this really what you want?")
+        exit(1)
+        # assert len(ac_space.shape) == 1
+        # return DiagGaussianPdType(ac_space.shape[0])
     elif isinstance(ac_space, spaces.Discrete):
         return CategoricalPdType(ac_space.n)
     elif isinstance(ac_space, spaces.MultiDiscrete):
@@ -340,3 +376,48 @@ def validate_probtype(probtype, pdparam):
     assert np.abs(klval - klval_ll) < 3 * klval_ll_stderr # within 3 sigmas
     print('ok on', probtype, pdparam)
 
+
+# From ddpg/noise.py, adapted to use TensorFlow random_normal for testing
+class OrnsteinUhlenbeckActionNoise():
+    def __init__(self, mu, sigma, theta=.15, dt=1e-2, x0=None, seed=None):
+        self.theta = theta
+        self.mu = mu
+        self.sigma = sigma
+        self.dt = dt
+        self.x0 = x0
+        self.reset()
+        with tf.Graph().as_default():
+            self.r = tf.random_normal(shape=mu.shape, seed=seed)
+            self.sess = tf.Session()
+
+    def __call__(self):
+        x = self.x_prev + self.theta * (self.mu - self.x_prev) * self.dt + self.sigma * np.sqrt(self.dt) * self.sess.run(self.r)
+        self.x_prev = x
+        return x
+
+    def reset(self):
+        self.x_prev = self.x0 if self.x0 is not None else np.zeros_like(self.mu)
+
+    def __repr__(self):
+        return 'OrnsteinUhlenbeckActionNoise(mu={}, sigma={})'.format(self.mu, self.sigma)
+
+
+def ornstein_uhlenbeck(mu, sigma, theta=.15, dt=1e-2, x0=None, seed=None):
+    r = tf.random_normal(shape=mu.shape, seed=seed)
+    if x0 is None:
+        x0 = tf.zeros_like(mu, dtype=tf.float32)
+    x = tf.Variable(x0, dtype=tf.float32, trainable=False)
+    return tf.assign_add(x, theta * (mu - x) * dt + sigma * np.sqrt(dt) * r)
+
+
+def test_ornstein_uhlenbeck():
+    tf.reset_default_graph()
+    sess = tf.Session()
+    o = ornstein_uhlenbeck(np.array(1.0), np.array(0.2), seed=0)
+    sess.run(tf.global_variables_initializer())
+    l1 = [sess.run(o) for _ in range(5)]
+
+    a = OrnsteinUhlenbeckActionNoise(np.array(1.0), np.array(0.2), seed=0)
+    l2 = [a() for _ in range(5)]
+
+    assert np.allclose(l1, l2)
