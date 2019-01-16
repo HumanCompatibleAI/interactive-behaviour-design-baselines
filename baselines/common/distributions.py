@@ -269,7 +269,7 @@ class OUPd(DiagGaussianPd):
             noise_shape = [1, self.mean.shape.as_list()[1]]
         else:
             noise_shape = self.mean.shape
-        self.noise = ornstein_uhlenbeck(mu=tf.zeros(noise_shape), sigma=0.2)
+        self.noise = ornstein_uhlenbeck(mu=tf.zeros(noise_shape), sigma=0.2, clip=0.1)
 
     def sample(self):
         return self.mean + self.std * self.noise
@@ -402,12 +402,16 @@ class OrnsteinUhlenbeckActionNoise():
         return 'OrnsteinUhlenbeckActionNoise(mu={}, sigma={})'.format(self.mu, self.sigma)
 
 
-def ornstein_uhlenbeck(mu, sigma, theta=.15, dt=1e-2, x0=None, seed=None):
+def ornstein_uhlenbeck(mu, sigma, theta=.15, dt=1e-2, x0=None, seed=None, clip=None):
     r = tf.random_normal(shape=mu.shape, seed=seed)
     if x0 is None:
         x0 = tf.zeros_like(mu, dtype=tf.float32)
     x = tf.Variable(x0, dtype=tf.float32, trainable=False)
-    return tf.assign_add(x, theta * (mu - x) * dt + sigma * np.sqrt(dt) * r)
+    delta = theta * (mu - x) * dt + sigma * np.sqrt(dt) * r
+    new = x + delta
+    if clip is not None:
+        new = tf.clip_by_value(new, -clip, clip)
+    return tf.assign(x, new)
 
 
 def test_ornstein_uhlenbeck():
@@ -415,9 +419,11 @@ def test_ornstein_uhlenbeck():
     sess = tf.Session()
     o = ornstein_uhlenbeck(np.array(1.0), np.array(0.2), seed=0)
     sess.run(tf.global_variables_initializer())
-    l1 = [sess.run(o) for _ in range(5)]
+    l1 = [sess.run(o) for _ in range(10)]
 
     a = OrnsteinUhlenbeckActionNoise(np.array(1.0), np.array(0.2), seed=0)
-    l2 = [a() for _ in range(5)]
+    l2 = [a() for _ in range(10)]
 
+    print(l1)
+    print(l2)
     assert np.allclose(l1, l2)
