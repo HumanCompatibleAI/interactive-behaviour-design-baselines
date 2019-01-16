@@ -97,7 +97,7 @@ class Model(object):
         l2_loss = tf.add_n([tf.nn.l2_loss(w) for w in weights])
 
         # Total loss
-        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef + 1e-5 * l2_loss
+        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
 
         if bc_model.action.dtype == tf.float32:
             squared_differences = (bc_model.action - BC_ACT) ** 2
