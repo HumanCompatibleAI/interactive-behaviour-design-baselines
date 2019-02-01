@@ -32,7 +32,7 @@ class Model(object):
     - Save load the model
     """
     def __init__(self, *, policy, ob_space, ac_space, nbatch_act, nbatch_train,
-                nsteps, ent_coef, vf_coef, max_grad_norm):
+                nsteps, ent_coef, vf_coef, max_grad_norm, l2_coef=0):
         sess = get_session()
 
         with tf.variable_scope('ppo2_model', reuse=tf.AUTO_REUSE):
@@ -97,7 +97,7 @@ class Model(object):
         l2_loss = tf.add_n([tf.nn.l2_loss(w) for w in weights])
 
         # Total loss
-        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
+        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef + l2_loss * l2_coef
 
         if bc_model.action.dtype == tf.float32:
             squared_differences = (bc_model.action - BC_ACT) ** 2
