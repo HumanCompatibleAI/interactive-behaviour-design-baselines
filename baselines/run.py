@@ -222,7 +222,7 @@ def main():
     with tf.variable_scope("ppo2_model/pi", reuse=True):
         noise = tf.get_variable('logstd')
     sess = get_session()
-    sess.run(noise.assign(np.zeros(noise.shape)))
+    sess.run(noise.assign(np.ones(noise.shape) * (-999)))
 
     if args.play:
         logger.log("Running trained model")
