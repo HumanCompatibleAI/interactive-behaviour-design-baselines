@@ -97,7 +97,7 @@ class Model(object):
         l2_loss = tf.add_n([tf.nn.l2_loss(w) for w in weights])
 
         # Total loss
-        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef + l2_loss * l2_coef
+        loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
 
         if bc_model.action.dtype == tf.float32:
             squared_differences = (bc_model.action - BC_ACT) ** 2
@@ -116,9 +116,9 @@ class Model(object):
         bc_coef = 10
 
         losses = {
-            PolicyTrainMode.R_ONLY: loss,
-            PolicyTrainMode.BC_ONLY: bc_loss,
-            PolicyTrainMode.R_PLUS_BC: loss + bc_loss * bc_coef
+            PolicyTrainMode.R_ONLY: loss + l2_loss * l2_coef,
+            PolicyTrainMode.BC_ONLY: bc_loss + l2_loss * l2_coef,
+            PolicyTrainMode.R_PLUS_BC: loss + bc_loss * bc_coef + l2_loss * l2_coef
         }
 
         train_ops = dict()
