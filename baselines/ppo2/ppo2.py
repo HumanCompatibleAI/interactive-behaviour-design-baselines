@@ -102,6 +102,9 @@ class Model(object):
         if bc_model.action.dtype == tf.float32:
             squared_differences = (bc_model.action - BC_ACT) ** 2
             assert squared_differences.shape.as_list() == [None, ac_space.shape[0]]
+            squared_differences = tf.concat([squared_differences[:, :3],
+                                             10 * squared_differences[:, 3:4]],
+                                            axis=1)
             squared_norms = tf.reduce_sum(squared_differences, axis=1)
             assert squared_norms.shape.as_list() == [None]
             bc_loss = tf.reduce_mean(squared_norms, axis=0)
