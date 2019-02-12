@@ -205,6 +205,7 @@ class Model(object):
         self.initial_state = act_model.initial_state
         self.losses = losses
         self.BC_ACT = BC_ACT
+        self.bc_loss = bc_loss
 
         self.save = functools.partial(save_variables, sess=sess)
         self.load = functools.partial(load_variables, sess=sess)
