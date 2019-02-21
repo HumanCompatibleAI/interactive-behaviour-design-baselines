@@ -164,7 +164,7 @@ class Model(object):
                         values=None, neglogpacs=None, states=None,
                         train_mode=PolicyTrainMode.R_ONLY, bc_obses=None, bc_actions=None):
             td_map = {LR: lr}
-            fetches = {}
+            fetches = {'l2_loss': l2_loss}
             if train_mode in [PolicyTrainMode.R_ONLY, PolicyTrainMode.R_PLUS_BC]:
                 advs = returns - values
                 advs = (advs - advs.mean()) / (advs.std() + 1e-8)
