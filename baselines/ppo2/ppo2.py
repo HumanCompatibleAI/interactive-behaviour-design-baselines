@@ -119,11 +119,12 @@ class Model(object):
             raise Exception(f"Unknown action dtype '{bc_model.action.dtype}'")
 
         bc_coef = 10
+        rl_vs_bc_coef = tf.placeholder(tf.float32, [])
 
         losses = {
             PolicyTrainMode.R_ONLY: loss + l2_loss * l2_coef,
             PolicyTrainMode.BC_ONLY: bc_loss + l2_loss * l2_coef,
-            PolicyTrainMode.R_PLUS_BC: loss + bc_loss * bc_coef + l2_loss * l2_coef
+            PolicyTrainMode.R_PLUS_BC: rl_vs_bc_coef * loss + (1. - rl_vs_bc_coef) * bc_loss * bc_coef + l2_loss * l2_coef
         }
 
         train_ops = dict()
@@ -167,7 +168,8 @@ class Model(object):
 
         def train_rl_bc(lr, cliprange=None, obs=None, returns=None, masks=None, actions=None,
                         values=None, neglogpacs=None, states=None,
-                        train_mode=PolicyTrainMode.R_ONLY, bc_obses=None, bc_actions=None):
+                        train_mode=PolicyTrainMode.R_ONLY, bc_obses=None, bc_actions=None,
+                        rl_vs_bc_coef_v=None):
             td_map = {LR: lr}
             fetches = {}
             if train_mode in [PolicyTrainMode.R_ONLY, PolicyTrainMode.R_PLUS_BC]:
@@ -190,6 +192,8 @@ class Model(object):
                 td_map.update({bc_model.X: bc_obses,
                               BC_ACT: bc_actions})
                 fetches.update({'bc_loss': bc_loss})
+            assert rl_vs_bc_coef_v is not None
+            td_map.update({rl_vs_bc_coef: rl_vs_bc_coef_v})
             train_op = train_ops[train_mode]
             vals = sess.run(list(fetches.values()) + [train_op], td_map)[:-1]
             return {k: v for k, v in zip(fetches.keys(), vals)}
