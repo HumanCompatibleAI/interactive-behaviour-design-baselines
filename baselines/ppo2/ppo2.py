@@ -100,8 +100,13 @@ class Model(object):
         loss = pg_loss - entropy * ent_coef + vf_loss * vf_coef
 
         if bc_model.action.dtype == tf.float32:
-            squared_differences = (bc_model.action - BC_ACT) ** 2
-            assert squared_differences.shape.as_list() == [None, ac_space.shape[0]]
+            squared_differences = (bc_model.pi - BC_ACT) ** 2  # pi = mean
+            print("bc_model.pi:", bc_model.pi)
+            # We assume we're operating on FetchPickAndPlace
+            assert squared_differences.shape.as_list() == [None, 4]
+            # Give gripper action loss 10 times as much weight as other actions
+            squared_differences = tf.concat([squared_differences[:, :3], 10 * squared_differences[:, 3, None]], axis=1)
+            assert squared_differences.shape.as_list() == [None, 4]
             squared_norms = tf.reduce_sum(squared_differences, axis=1)
             assert squared_norms.shape.as_list() == [None]
             bc_loss = tf.reduce_mean(squared_norms, axis=0)
