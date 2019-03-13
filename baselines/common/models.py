@@ -46,7 +46,6 @@ def mlp(num_layers=2, num_hidden=64, activation=tf.tanh, layer_norm=False):
 
     function that builds fully connected network with a given input tensor / placeholder
     """
-    print("mlp with", locals())
     def network_fn(X):
         h = tf.layers.flatten(X)
         for i in range(num_layers):

@@ -93,7 +93,6 @@ class Model(object):
         clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), CLIPRANGE)))
 
         weights = [v for v in tf.trainable_variables() if '/w:0' in v.name]
-        print(weights)
         l2_loss = tf.add_n([tf.nn.l2_loss(w) for w in weights])
 
         # Total loss
@@ -101,7 +100,6 @@ class Model(object):
 
         if bc_model.action.dtype == tf.float32:
             squared_differences = (bc_model.pi - BC_ACT) ** 2  # pi = mean
-            print("bc_model.pi:", bc_model.pi)
             # We assume we're operating on FetchPickAndPlace
             assert squared_differences.shape.as_list() == [None, 4]
             # Give gripper action loss 10 times as much weight as other actions
