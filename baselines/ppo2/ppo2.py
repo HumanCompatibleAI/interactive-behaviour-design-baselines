@@ -93,7 +93,6 @@ class Model(object):
         clipfrac = tf.reduce_mean(tf.to_float(tf.greater(tf.abs(ratio - 1.0), CLIPRANGE)))
 
         weights = [v for v in tf.trainable_variables() if '/w:0' in v.name]
-        print(weights)
         l2_loss = tf.add_n([tf.nn.l2_loss(w) for w in weights])
 
         # Total loss
