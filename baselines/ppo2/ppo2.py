@@ -4,6 +4,8 @@ import functools
 import numpy as np
 import os.path as osp
 import tensorflow as tf
+
+import global_variables
 from baselines import logger
 from collections import deque
 from baselines.common import explained_variance, set_global_seeds
@@ -266,6 +268,9 @@ class Runner(AbstractEnvRunner):
         mb_dones = np.asarray(mb_dones, dtype=np.bool)
         last_values = self.model.value(self.obs, S=self.states, M=self.dones)
 
+        mb_rewards = self.process_rewards(mb_obs, mb_rewards)
+        # TODO log episode rewards after processing
+
         # discount/bootstrap off value fn
         mb_returns = np.zeros_like(mb_rewards)
         mb_advs = np.zeros_like(mb_rewards)
@@ -282,6 +287,17 @@ class Runner(AbstractEnvRunner):
         mb_returns = mb_advs + mb_values
         return (*map(sf01, (mb_obs, mb_returns, mb_dones, mb_actions, mb_values, mb_neglogpacs)),
             mb_states, epinfos)
+
+    def process_rewards(self, mb_obs, mb_rewards):
+        assert mb_obs.shape == (self.nsteps, self.env.num_envs) + self.env.observation_space.shape
+        assert mb_rewards.shape == (self.nsteps, self.env.num_envs)
+        mb_obs_flat = np.reshape(mb_obs, (-1,) + self.env.observation_space.shape)
+        mb_rewards_flat = np.reshape(mb_rewards, (-1,))
+        reward_selector_rewards = global_variables.reward_selector.rewards(mb_obs_flat, mb_rewards_flat)
+        mb_rewards = np.reshape(reward_selector_rewards, mb_rewards.shape)
+        return mb_rewards
+
+
 # obs, returns, masks, actions, values, neglogpacs, states = runner.run()
 def sf01(arr):
     """
