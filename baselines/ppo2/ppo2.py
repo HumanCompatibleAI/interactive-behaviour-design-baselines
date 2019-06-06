@@ -2,7 +2,6 @@ import os
 import time
 import functools
 
-import easy_tf_log
 import numpy as np
 import os.path as osp
 import tensorflow as tf
@@ -19,7 +18,7 @@ from baselines.common.mpi_adam_optimizer import MpiAdamOptimizer
 from mpi4py import MPI
 from baselines.common.tf_util import initialize
 from baselines.common.mpi_util import sync_from_root
-from policies.base_policy import PolicyTrainMode
+from policies.base_policy import PolicyTrainMode, EpisodeRewardLogger
 
 
 class Model(object):
@@ -221,25 +220,6 @@ class Model(object):
             initialize()
         global_variables = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope="")
         sync_from_root(sess, global_variables) #pylint: disable=E1101
-
-
-class EpisodeRewardLogger():
-    def __init__(self, log_dir, n_steps, n_envs):
-        self.logger = easy_tf_log.Logger(os.path.join(log_dir, 'ppo_reward_logger'))
-        self.n_steps = n_steps
-        self.n_envs = n_envs
-        self.reward = 0
-
-    def log(self, mb_rewards, mb_dones):
-        assert mb_rewards.shape == (self.n_steps, self.n_envs)
-        assert mb_dones.shape == (self.n_steps, self.n_envs)
-        mb_rewards_env0 = mb_rewards[:, 0]
-        mb_dones_env0 = mb_dones[:, 0]
-        for n in range(len(mb_rewards)):
-            self.reward += mb_rewards_env0[n]
-            if mb_dones_env0[n]:
-                self.logger.logkv('ppo_reward', self.reward)
-                self.reward = 0
 
 
 class Runner(AbstractEnvRunner):
